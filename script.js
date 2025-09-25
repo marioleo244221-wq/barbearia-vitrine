@@ -312,12 +312,14 @@ const confirmarBtn = document.getElementById('confirmarBtn');
 const toKey = (ymd, hhmm, profSlug) => `ag_${ymd}_${hhmm}_${profSlug}`;
 const normalizeHora = (h) => (h || "").padStart(5, "0");
 
-// === Compat com painel: consulta ocupados em "agendamentos" por dataISO + profissional ===
+// ======== AJUSTE: chave agregada para evitar índice composto ========
+const diaProfKey = (ymd, prof) => `${ymd}#${prof}`;
+
+// === Listar ocupados SEM índice composto (1 where) ===
 async function getReservasByDate(ymd) {
     const q = query(
         collection(db, 'agendamentos'),
-        where("dataISO", "==", ymd),
-        where("profissional", "==", "barbeiro")
+        where("diaProf", "==", diaProfKey(ymd, "barbeiro"))
     );
     const snap = await getDocs(q);
     const horasOcupadas = new Set();
@@ -443,11 +445,12 @@ confirmarBtn?.addEventListener('click', async () => {
 
         const isRaClub = agendamentoContexto?.raclub?.status === 'membro';
 
-        // ✅ Campos compatíveis com o PAINEL
+        // ✅ Campos compatíveis com o PAINEL + diaProf para consulta sem índice
         await setDoc(ref, {
-            dataISO: data,             // <--- compatível
-            hora: hhmm,                // <--- compatível
-            profissional: "barbeiro",  // <--- compatível com seletor do painel
+            dataISO: data,             // compatível
+            hora: hhmm,                // compatível
+            profissional: "barbeiro",  // compatível com seletor do painel
+            diaProf: diaProfKey(data, "barbeiro"), // <--- AJUSTE
             barbeiroNome: ctx.profissional, // info adicional
             clienteNome: agendamentoContexto.nomeCliente || null,
             cliente: agendamentoContexto.nomeCliente || null, // redundância para compatibilidade
@@ -467,7 +470,10 @@ confirmarBtn?.addEventListener('click', async () => {
             createdAt: serverTimestamp()
         });
 
-        await carregarIndisponiveis();
+        // não derrubar a experiência se UI falhar
+        try { await carregarIndisponiveis(); } catch (e) {
+            console.warn("Falhou recarregar indisponíveis (UI):", e);
+        }
 
         const dataBR = new Date(`${data}T00:00:00`).toLocaleDateString('pt-BR');
         const servicoTxt = agendamentoContexto.servico
