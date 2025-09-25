@@ -210,25 +210,25 @@ if (btnRAAssinar) {
 const dataInput = document.getElementById('data');
 const horaSelect = document.getElementById('hora');
 
-// >>> horários por profissional (apenas UI)
+// >>> horários fixos 09:00–18:00 de 1 em 1 hora
 const MAPA_FIM_EXPEDIENTE = {
     'Rodrigo': '18:30',
     'Melqui': '17:30'
 };
-function gerarIntervalos(inicio = '09:00', fim = '18:30') {
+// AJUSTE: passo de 60 min e janela 09:00–18:00
+function gerarIntervalos(inicio = '09:00', fim = '18:00', passoMin = 60) {
     const out = [];
     let [h, m] = inicio.split(':').map(Number);
     const [hF, mF] = fim.split(':').map(Number);
     while (h < hF || (h === hF && m <= mF)) {
         out.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
-        m += 30;
-        if (m >= 60) { m = 0; h += 1; }
+        m += passoMin;
+        while (m >= 60) { m -= 60; h += 1; }
     }
     return out;
 }
-function fillHorasForProf(prof) {
-    const fim = MAPA_FIM_EXPEDIENTE[prof] || '18:30';
-    const lista = gerarIntervalos('09:00', fim);
+function fillHorasForProf(/* prof */) {
+    const lista = gerarIntervalos('09:00', '18:00', 60); // 09 → 18 de 1h em 1h
     horaSelect.innerHTML = `<option value="">Selecione um horário</option>` +
         lista.map(h => `<option>${h}</option>`).join('');
 }
@@ -248,7 +248,7 @@ function abrirModalAgendamento() {
     dataInput.min = `${y}-${m}-${d}`;
     dataInput.value = "";
 
-    // horários conforme profissional escolhido
+    // horários fixos
     fillHorasForProf(ctx.profissional);
 
     horaSelect.value = "";
@@ -303,7 +303,6 @@ const auth = getAuth(app);
 signInAnonymously(auth).catch((e) => {
     console.error("Anon auth error:", e);
 });
-// (opcional) debug: ver UID no console
 onAuthStateChanged(auth, (user) => {
     console.log("Auth user:", user ? user.uid : null);
 });
@@ -312,7 +311,7 @@ const confirmarBtn = document.getElementById('confirmarBtn');
 const toKey = (ymd, hhmm, profSlug) => `ag_${ymd}_${hhmm}_${profSlug}`;
 const normalizeHora = (h) => (h || "").padStart(5, "0");
 
-// ======== AJUSTE: chave agregada para evitar índice composto ========
+// ======== chave agregada para evitar índice composto ========
 const diaProfKey = (ymd, prof) => `${ymd}#${prof}`;
 
 // === Listar ocupados SEM índice composto (1 where) ===
@@ -447,16 +446,15 @@ confirmarBtn?.addEventListener('click', async () => {
 
         // ✅ Campos compatíveis com o PAINEL + diaProf para consulta sem índice
         await setDoc(ref, {
-            dataISO: data,             // compatível
-            hora: hhmm,                // compatível
-            profissional: "barbeiro",  // compatível com seletor do painel
-            diaProf: diaProfKey(data, "barbeiro"), // <--- AJUSTE
-            barbeiroNome: ctx.profissional, // info adicional
+            dataISO: data,
+            hora: hhmm,
+            profissional: "barbeiro",
+            diaProf: diaProfKey(data, "barbeiro"),
+            barbeiroNome: ctx.profissional,
             clienteNome: agendamentoContexto.nomeCliente || null,
-            cliente: agendamentoContexto.nomeCliente || null, // redundância para compatibilidade
+            cliente: agendamentoContexto.nomeCliente || null,
             servico: agendamentoContexto.servico?.nome || null,
             valor: agendamentoContexto.servico?.valor ?? 0,
-            // campos extras (opcional)
             servicoNome: agendamentoContexto.servico?.nome || null,
             servicoValor: agendamentoContexto.servico?.valor ?? null,
             produtos: agendamentoContexto.produtos || [],
@@ -470,7 +468,6 @@ confirmarBtn?.addEventListener('click', async () => {
             createdAt: serverTimestamp()
         });
 
-        // não derrubar a experiência se UI falhar
         try { await carregarIndisponiveis(); } catch (e) {
             console.warn("Falhou recarregar indisponíveis (UI):", e);
         }
